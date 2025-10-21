@@ -3,8 +3,10 @@ import tarfile
 import json
 import pandas as pd
 
+from src.config import RAW_DATA_PATH # Path to the raw GazeCapture data
+
 # --- Setup directories ---
-BASE_DIR = "/Volumes/5TBdrive"  # Path to the raw GazeCapture data
+BASE_DIR = RAW_DATA_PATH 
 SOURCE_DIR = os.path.join(BASE_DIR, "gazecapture")
 TARGET_DIR = os.path.join(BASE_DIR, "gazecapture_data")
 

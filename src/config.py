@@ -8,3 +8,5 @@ CONFIG = {"l2_penalty":1e-5,
           "learning_rate":1e-3,
           "earlystop_patience":5,
           "training_epochs":25}
+
+RAW_DATA_PATH = "add path to your raw data here"
