@@ -1,0 +1,10 @@
+CONFIG = {"l2_penalty":1e-5,
+          "conv1_filters":32,
+          "conv2_filters":64,
+          "conv3_filters":128,
+          "dense1_units":128,
+          "dense2_units":128,
+          "dropout_rate":0.3,
+          "learning_rate":1e-3,
+          "earlystop_patience":5,
+          "training_epochs":25}
