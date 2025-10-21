@@ -98,6 +98,14 @@ for i in range(100000):
 
 # --- Save combined data ---
 df = pd.DataFrame(rows)
-df.to_csv("data/raw_data.csv", index=False)
+
+# Create "data" directory in the top-level project directory
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DATA_DIR = os.path.join(ROOT_DIR, "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+
+output_path = os.path.join(DATA_DIR, "raw_data.csv")
+df.to_csv(output_path, index=False)
 
 print(f"DataFrame created with shape: {df.shape}")
+print(f"Saved to: {output_path}")
