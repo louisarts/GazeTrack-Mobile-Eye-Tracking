@@ -4,7 +4,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from tensorflow.keras import layers, Model, Input, regularizers
-from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.layers import BatchNormalization
+
 
 train_df = pd.read_csv("data/train_data.csv")
 val_df = pd.read_csv("data/val_data.csv")
@@ -64,7 +66,7 @@ def denorm_mae(y_true, y_pred):
 
 # --- model ---
 
-def simple_conv_neural_network( conv1_filters, 
+def arch_1_conv_neural_network( conv1_filters, 
                         conv2_filters, 
                         conv3_filters, 
                         dense1_units,
@@ -120,7 +122,8 @@ def simple_conv_neural_network( conv1_filters,
     
     return model, history
 
-def model_2_conv_neural_network(l2_penalty, 
+
+def arch_2_conv_neural_network(l2_penalty, 
                         conv1_filters, 
                         conv2_filters, 
                         conv3_filters, 
@@ -178,7 +181,70 @@ def model_2_conv_neural_network(l2_penalty,
     
     return model, history
 
-def conv_neural_network(l2_penalty, 
+def arch_3_conv_neural_network(l2_penalty, 
+                        conv1_filters, 
+                        conv2_filters, 
+                        conv3_filters, 
+                        dense1_units,
+                        dense2_units,
+                        dropout_rate,
+                        learning_rate,
+                        training_epochs):
+    
+    reg = regularizers.l2(l2_penalty)
+    
+    face_input = Input(shape=(64, 64, 3), name="face_input")
+    x_face = layers.Conv2D(conv1_filters, 3, activation='relu', kernel_regularizer=reg)(face_input)
+    x_face = layers.MaxPooling2D()(x_face)
+    x_face = layers.Conv2D(conv2_filters, 3, activation='relu', kernel_regularizer=reg)(x_face)
+    x_face = layers.MaxPooling2D()(x_face)
+    x_face = layers.Conv2D(conv3_filters, 3, activation='relu', kernel_regularizer=reg)(x_face)
+    x_face = layers.Flatten()(x_face)
+    x_face = layers.Dense(dense1_units, activation='relu', kernel_regularizer=reg)(x_face)
+    x_face = layers.Dropout(dropout_rate)(x_face)
+    
+    l_eye_input = Input(shape=(64, 64, 3), name="left_eye_input")
+    x_left = layers.Conv2D(conv1_filters, 3, activation='relu', kernel_regularizer=reg)(l_eye_input)
+    x_left = layers.MaxPooling2D()(x_left)
+    x_left = layers.Conv2D(conv2_filters, 3, activation='relu', kernel_regularizer=reg)(x_left)
+    x_left = layers.MaxPooling2D()(x_left)
+    x_left = layers.Conv2D(conv3_filters, 3, activation='relu', kernel_regularizer=reg)(x_left)
+    x_left = layers.Flatten()(x_left)
+    x_left = layers.Dense(dense1_units, activation='relu', kernel_regularizer=reg)(x_left)
+    x_left = layers.Dropout(dropout_rate)(x_left)
+    
+    r_eye_input = Input(shape=(64, 64, 3), name="right_eye_input")
+    x_right = layers.Conv2D(conv1_filters, 3, activation='relu', kernel_regularizer=reg)(r_eye_input)
+    x_right = layers.MaxPooling2D()(x_right)
+    x_right = layers.Conv2D(conv2_filters, 3, activation='relu', kernel_regularizer=reg)(x_right)
+    x_right = layers.MaxPooling2D()(x_right)
+    x_right = layers.Conv2D(conv3_filters, 3, activation='relu', kernel_regularizer=reg)(x_right)
+    x_right = layers.Flatten()(x_right)
+    x_right = layers.Dense(dense1_units, activation='relu', kernel_regularizer=reg)(x_right)
+    x_right = layers.Dropout(dropout_rate)(x_right)
+
+    combined = layers.Concatenate()([x_face, x_left, x_right])
+    x = layers.Dense(dense2_units, activation='relu', kernel_regularizer=reg)(combined)
+    x = layers.Dropout(dropout_rate)(x)
+    output = layers.Dense(2, kernel_regularizer=reg)(x)
+    
+    model = Model(inputs=[face_input, l_eye_input, r_eye_input], outputs=output)
+    
+    model.compile(
+    optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
+    loss='mse',                   # still in normalized space
+    metrics=[denorm_mae]          # MAE in de-normalized space
+)
+
+    history = model.fit(
+    train_ds,
+    validation_data=val_ds,
+    epochs=training_epochs
+)
+    
+    return model, history
+
+def arch_4_conv_neural_network(l2_penalty, 
                         conv1_filters, 
                         conv2_filters, 
                         conv3_filters, 
@@ -199,6 +265,7 @@ def conv_neural_network(l2_penalty,
     x_face = layers.Conv2D(conv3_filters, 3, activation='relu', kernel_regularizer=reg)(x_face)
     x_face = layers.Flatten()(x_face)
     x_face = layers.Dense(dense1_units, activation='relu', kernel_regularizer=reg)(x_face)
+    x_face = layers.Dropout(dropout_rate)(x_face)
     
     l_eye_input = Input(shape=(64, 64, 3), name="left_eye_input")
     x_left = layers.Conv2D(conv1_filters, 3, activation='relu', kernel_regularizer=reg)(l_eye_input)
@@ -208,7 +275,8 @@ def conv_neural_network(l2_penalty,
     x_left = layers.Conv2D(conv3_filters, 3, activation='relu', kernel_regularizer=reg)(x_left)
     x_left = layers.Flatten()(x_left)
     x_left = layers.Dense(dense1_units, activation='relu', kernel_regularizer=reg)(x_left)
-
+    x_left = layers.Dropout(dropout_rate)(x_left)
+    
     r_eye_input = Input(shape=(64, 64, 3), name="right_eye_input")
     x_right = layers.Conv2D(conv1_filters, 3, activation='relu', kernel_regularizer=reg)(r_eye_input)
     x_right = layers.MaxPooling2D()(x_right)
@@ -217,7 +285,8 @@ def conv_neural_network(l2_penalty,
     x_right = layers.Conv2D(conv3_filters, 3, activation='relu', kernel_regularizer=reg)(x_right)
     x_right = layers.Flatten()(x_right)
     x_right = layers.Dense(dense1_units, activation='relu', kernel_regularizer=reg)(x_right)
-    
+    x_right = layers.Dropout(dropout_rate)(x_right)
+
     combined = layers.Concatenate()([x_face, x_left, x_right])
     x = layers.Dense(dense2_units, activation='relu', kernel_regularizer=reg)(combined)
     x = layers.Dropout(dropout_rate)(x)
@@ -234,6 +303,7 @@ def conv_neural_network(l2_penalty,
     early_stop = EarlyStopping(
     monitor='val_loss', patience=earlystop_patience, restore_best_weights=True, verbose=1
 )
+
     history = model.fit(
     train_ds,
     validation_data=val_ds,
@@ -242,6 +312,85 @@ def conv_neural_network(l2_penalty,
 )
     
     return model, history
+
+def arch_5_conv_neural_network(l2_penalty, 
+                        conv1_filters, 
+                        conv2_filters, 
+                        conv3_filters, 
+                        dense1_units,
+                        dense2_units,
+                        dropout_rate,
+                        learning_rate,
+                        earlystop_patience,
+                        training_epochs):
+    
+    reg = regularizers.l2(l2_penalty)
+    
+    face_input = Input(shape=(64, 64, 3), name="face_input")
+    x_face = layers.Conv2D(conv1_filters, 3, activation='relu', kernel_regularizer=reg)(face_input)
+    x_face = BatchNormalization()(x_face)
+    x_face = layers.MaxPooling2D()(x_face)
+    x_face = layers.Conv2D(conv2_filters, 3, activation='relu', kernel_regularizer=reg)(x_face)
+    x_face = BatchNormalization()(x_face)
+    x_face = layers.MaxPooling2D()(x_face)
+    x_face = layers.Conv2D(conv3_filters, 3, activation='relu', kernel_regularizer=reg)(x_face)
+    x_face = BatchNormalization()(x_face)
+    x_face = layers.Flatten()(x_face)
+    x_face = layers.Dense(dense1_units, activation='relu', kernel_regularizer=reg)(x_face)
+    x_face = layers.Dropout(dropout_rate)(x_face)
+    
+    l_eye_input = Input(shape=(64, 64, 3), name="left_eye_input")
+    x_left = layers.Conv2D(conv1_filters, 3, activation='relu', kernel_regularizer=reg)(l_eye_input)
+    x_left = BatchNormalization()(x_left)
+    x_left = layers.MaxPooling2D()(x_left)
+    x_left = layers.Conv2D(conv2_filters, 3, activation='relu', kernel_regularizer=reg)(x_left)
+    x_left = BatchNormalization()(x_left)
+    x_left = layers.MaxPooling2D()(x_left)
+    x_left = layers.Conv2D(conv3_filters, 3, activation='relu', kernel_regularizer=reg)(x_left)
+    x_left = BatchNormalization()(x_left)
+    x_left = layers.Flatten()(x_left)
+    x_left = layers.Dense(dense1_units, activation='relu', kernel_regularizer=reg)(x_left)
+    x_left = layers.Dropout(dropout_rate)(x_left)
+    
+    r_eye_input = Input(shape=(64, 64, 3), name="right_eye_input")
+    x_right = layers.Conv2D(conv1_filters, 3, activation='relu', kernel_regularizer=reg)(r_eye_input)
+    x_right = BatchNormalization()(x_right)
+    x_right = layers.MaxPooling2D()(x_right)
+    x_right = layers.Conv2D(conv2_filters, 3, activation='relu', kernel_regularizer=reg)(x_right)
+    x_right = BatchNormalization()(x_right)
+    x_right = layers.MaxPooling2D()(x_right)
+    x_right = layers.Conv2D(conv3_filters, 3, activation='relu', kernel_regularizer=reg)(x_right)
+    x_right = BatchNormalization()(x_right)
+    x_right = layers.Flatten()(x_right)
+    x_right = layers.Dense(dense1_units, activation='relu', kernel_regularizer=reg)(x_right)
+    x_right = layers.Dropout(dropout_rate)(x_right)
+
+    combined = layers.Concatenate()([x_face, x_left, x_right])
+    x = layers.Dense(dense2_units, activation='relu', kernel_regularizer=reg)(combined)
+    x = layers.Dropout(dropout_rate)(x)
+    output = layers.Dense(2, kernel_regularizer=reg)(x)
+    
+    model = Model(inputs=[face_input, l_eye_input, r_eye_input], outputs=output)
+    
+    model.compile(
+    optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
+    loss='mse',                   # still in normalized space
+    metrics=[denorm_mae]          # MAE in de-normalized space
+)
+
+    early_stop = EarlyStopping(
+    monitor='val_loss', patience=earlystop_patience, restore_best_weights=True, verbose=1
+)
+
+    history = model.fit(
+    train_ds,
+    validation_data=val_ds,
+    epochs=training_epochs,
+    callbacks=[early_stop]
+)
+    
+    return model, history
+
 
 def save_model(model, model_name):
 
