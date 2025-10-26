@@ -64,7 +64,9 @@ def denorm_mae(y_true, y_pred):
     y_pred_denorm = y_pred * target_std_tf + target_mean_tf
     return tf.reduce_mean(tf.abs(y_true_denorm - y_pred_denorm))
 
-# --- model ---
+# --- model architectures ---
+
+#################################### ARCHITECTURE 1 ###################################################
 
 def arch_1_conv_neural_network( conv1_filters, 
                         conv2_filters, 
@@ -122,6 +124,7 @@ def arch_1_conv_neural_network( conv1_filters,
     
     return model, history
 
+#################################### ARCHITECTURE 2 ###################################################
 
 def arch_2_conv_neural_network(l2_penalty, 
                         conv1_filters, 
@@ -180,6 +183,8 @@ def arch_2_conv_neural_network(l2_penalty,
 )
     
     return model, history
+
+#################################### ARCHITECTURE 3 ###################################################
 
 def arch_3_conv_neural_network(l2_penalty, 
                         conv1_filters, 
@@ -243,6 +248,9 @@ def arch_3_conv_neural_network(l2_penalty,
 )
     
     return model, history
+
+#################################### ARCHITECTURE 4 ###################################################
+
 
 def arch_4_conv_neural_network(l2_penalty, 
                         conv1_filters, 
@@ -312,6 +320,9 @@ def arch_4_conv_neural_network(l2_penalty,
 )
     
     return model, history
+
+#################################### ARCHITECTURE 5 ###################################################
+
 
 def arch_5_conv_neural_network(l2_penalty, 
                         conv1_filters, 
