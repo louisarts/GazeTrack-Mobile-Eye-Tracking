@@ -76,8 +76,6 @@ def arch_1_conv_neural_network( conv1_filters,
                         learning_rate,
                         training_epochs):
     
-    
-    
     face_input = Input(shape=(64, 64, 3), name="face_input")
     x_face = layers.Conv2D(conv1_filters, 3, activation='relu')(face_input)
     x_face = layers.MaxPooling2D()(x_face)
