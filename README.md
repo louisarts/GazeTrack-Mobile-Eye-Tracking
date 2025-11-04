@@ -114,3 +114,24 @@ Adjust the hyperparameters either directly in each script or by editing the shar
 
 ## License
 This project is released under the [MIT License](LICENSE).
+
+---
+
+## Dataset Acknowledgement
+
+This project uses data from the [**GazeCapture dataset**](https://gazecapture.csail.mit.edu/) and the associated **iTracker models** developed at the Massachusetts Institute of Technology (MIT) Computer Science and Artificial Intelligence Laboratory (CSAIL).
+
+**Copyright © 2017** — Kyle Krafka, Aditya Khosla, Petr Kellnhofer, Harini Kannan, Suchendra Bhandarkar, Wojciech Matusik, and Antonio Torralba.  
+All rights reserved.
+
+Use of the GazeCapture database and iTracker models is governed by the **“License Agreement for Use of GazeCapture Database and iTracker Models”** provided by MIT CSAIL.  
+They are made available **for research and educational use only** and **may not be redistributed or used in commercial applications**.
+
+**Required citation:**  
+> Krafka, K., Khosla, A., Kellnhofer, P., Kannan, H., Bhandarkar, S., Matusik, W., & Torralba, A. (2016). *Eye Tracking for Everyone.* CVPR 2016.
+
+This repository does **not** include or redistribute any portion of the GazeCapture data or iTracker models.  
+All code is independently implemented and released under the MIT License for educational and non-commercial research purposes.
+
+---
+
