@@ -19,9 +19,7 @@ python -m venv .venv
 source .venv/bin/activate
 
 # install dependencies
-pip install -r requirements.txt  # create this from your environment
-# or install the core packages manually
-pip install tensorflow torch torchvision pillow opencv-python flask numpy pandas matplotlib
+pip install -r requirements.txt
 ```
 
 * Set `RAW_DATA_PATH` in [`src/config.py`](src/config.py) to the directory where you will download the raw GazeCapture archives.
