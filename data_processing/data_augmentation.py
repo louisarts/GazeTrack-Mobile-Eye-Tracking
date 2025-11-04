@@ -150,7 +150,7 @@ for i in range(len(df)):
     os.remove(frame_path)
 
 
-# ---------------- UPDATE DATAFRAME WITH NEW PATHS ---------------- #
+# ---------------- UPDATED DATAFRAME WITH NEW PATHS ---------------- #
 
 # Create new paths for the saved crop files
 face_crop_path = []

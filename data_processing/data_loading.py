@@ -3,16 +3,15 @@ import tarfile
 import json
 import pandas as pd
 
-from src.config import RAW_DATA_PATH # Path to the raw GazeCapture data
+from src.config import RAW_DATA_PATH  # Path to the raw GazeCapture data
 
-# --- Setup directories ---
-BASE_DIR = RAW_DATA_PATH 
+# Set up directories
+BASE_DIR = RAW_DATA_PATH
 SOURCE_DIR = os.path.join(BASE_DIR, "gazecapture")
 TARGET_DIR = os.path.join(BASE_DIR, "gazecapture_data")
-
 os.makedirs(TARGET_DIR, exist_ok=True)
 
-# --- Extract .tar.gz files ---
+# Extract all .tar.gz files
 tar_files = sorted(
     f for f in os.listdir(SOURCE_DIR)
     if f.endswith(".tar.gz") and not f.startswith("._")
@@ -35,7 +34,7 @@ for file_name in tar_files:
 
 print(f"Done. Extracted {extracted_count} files.")
 
-# --- Parse JSON and build DataFrame ---
+# Parse JSON files and collect data
 rows = []
 BASE_PATH = os.path.join(BASE_DIR, "gazecapture_data")
 
@@ -62,6 +61,7 @@ for i in range(100000):
         print(f"Failed to load JSON for person {person_id}: {e}")
         continue
 
+    # Extract per-frame data
     for j in range(10000):
         frame_id = f"{j:05d}.jpg"
         frame_path = os.path.join(person_path, "frames", frame_id)
@@ -96,10 +96,10 @@ for i in range(100000):
             print(f"Skipping frame {j} for person {person_id}: {e}")
             continue
 
-# --- Save combined data ---
+# Save all collected data to CSV
 df = pd.DataFrame(rows)
 
-# Create "data" directory in the top-level project directory
+# Create top-level data directory
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DATA_DIR = os.path.join(ROOT_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)

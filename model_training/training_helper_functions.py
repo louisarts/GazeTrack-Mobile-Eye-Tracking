@@ -11,16 +11,16 @@ from tensorflow.keras.layers import BatchNormalization
 train_df = pd.read_csv("data/train_data.csv")
 val_df = pd.read_csv("data/val_data.csv")
 
-# --- defining training data mean and standard deviation for target normalisation ---
+#Defining training data mean and standard deviation for target normalisation
 target_train_raw = train_df[['dot_XCam', 'dot_YCam']].values.astype('float32')
 target_mean = target_train_raw.mean(axis=0)
 target_std = target_train_raw.std(axis=0)
 
-# Convert to tf constants once so they can be used in metrics
+#Convert to tf constants once so they can be used in metrics
 target_mean_tf = tf.constant(target_mean, dtype=tf.float32)
 target_std_tf = tf.constant(target_std, dtype=tf.float32)
 
-# --- Helper functions
+#Helper functions
 def load_npz_tf(face_path, l_eye_path, r_eye_path, label):
     def _load(path_tensor):
         path_str = path_tensor.numpy().decode("utf-8")
@@ -35,7 +35,7 @@ def load_npz_tf(face_path, l_eye_path, r_eye_path, label):
     l_eye.set_shape([64, 64, 3])
     r_eye.set_shape([64, 64, 3])
     
-    # normalize labels
+    #Normalize labels
     label = (label - tf.constant(target_mean, tf.float32)) / tf.constant(target_std, tf.float32)
 
     return (face, l_eye, r_eye), label
@@ -53,18 +53,18 @@ def create_dataset(df, batch_size=64):
     return ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
 
 
-# --- loading train and validation from csv ---
+# Loading train and validation from csv
 train_ds = create_dataset(train_df, batch_size=64)
 val_ds = create_dataset(val_df, batch_size=64)
 
 
-# --- custom metric for denormalized MAE ---
+# Custom metric for denormalized MAE
 def denorm_mae(y_true, y_pred):
     y_true_denorm = y_true * target_std_tf + target_mean_tf
     y_pred_denorm = y_pred * target_std_tf + target_mean_tf
     return tf.reduce_mean(tf.abs(y_true_denorm - y_pred_denorm))
 
-# --- model architectures ---
+
 
 #################################### ARCHITECTURE 1 ###################################################
 
