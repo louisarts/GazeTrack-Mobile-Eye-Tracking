@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Dot Viz</title>
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; background: #fff; }
+      body { touch-action: manipulation; }
+      #viz { display:block; width: 100vw; height: 100vh; }
+      video, #capture { display:none; } /* hidden camera & capture canvas */
+
+      /* Tap-to-start overlay */
+      #overlay {
+        position: fixed; inset: 0;
+        display: grid; place-items: center;
+        background: #ffffff;
+        color: #111; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        font-size: clamp(18px, 4vw, 24px); user-select: none;
+        text-align: center; padding: 16px;
+      }
+      #overlay.hide { display: none; }
+    </style>
+  </head>
+  <body>
+    <canvas id="viz"></canvas>
+    <div id="overlay">Tap to start</div>
+    <video id="video" autoplay playsinline></video>
+    <canvas id="capture"></canvas>
+
+    <script>
+      const viz = document.getElementById('viz');
+      const overlay = document.getElementById('overlay');
+      const video = document.getElementById('video');
+      const capture = document.getElementById('capture');
+
+      let started = false;
+      let running = false;
+      let lastSent = 0;
+      const targetFPS = 8;
+
+      // --- LIVE DOT STYLE ---
+      const LIVE_DOT_RADIUS = 6;
+
+      // Border style
+      const BORDER_WIDTH = 2;
+      const BORDER_COLOR = 'rgba(0,0,0,0.25)';
+
+      // Raw latest prediction from server (your coord system)
+      let lastCoords = null;
+
+      // -------------------------
+      // Calibration: 4 points (TL, TR, BR, BL)
+      // -------------------------
+      const CALIB_HOLD_SECONDS = 10;   // per corner
+      const CALIB_POINTS = 4;         // corners only
+      const MARGIN_FRACTION = 0.03;
+
+      let calibrating = false;
+      let calibPhase = 0;              // 0..3
+      let holdStart = 0;               // ms
+      let calibSamplesX = [];
+      let calibSamplesY = [];
+      const calibMedians = [];
+      let biasX = 0, biasY = 0;
+
+      function median(arr){
+        const n = arr.length;
+        if (!n) return null;
+        const a = arr.slice().sort((x, y) => x - y);
+        const m = Math.floor(n / 2);
+        return (n % 2) ? a[m] : 0.5 * (a[m - 1] + a[m]);
+      }
+
+      // Calibration target positions (screen pixels)
+      // Order: 0 TL, 1 TR, 2 BR, 3 BL
+      function targetScreenPos(phase, w, h){
+        const margin = Math.round(Math.min(w,h) * MARGIN_FRACTION);
+        switch (phase) {
+          case 0: return { cx: margin,       cy: margin };         // TL
+          case 1: return { cx: w - margin,   cy: margin };         // TR
+          case 2: return { cx: w - margin,   cy: h - margin };     // BR
+          case 3: return { cx: margin,       cy: h - margin };     // BL
+          default: return { cx: Math.round(w/2), cy: Math.round(h/2) };
+        }
+      }
+
+      // Expected RAW (x,y) given draw mapping: cx = (w/2) - x' ; cy = 0 - y'
+      // If the dot is at (cx, cy), the expected raw (with zero bias) is:
+      // xExp = (w/2) - cx ; yExp = -cy
+      function expectedRawForScreen(cx, cy, w, h){
+        const xExp = (w / 2) - cx;  // X flipped to match drawing
+        const yExp = -cy;
+        return { xExp, yExp };
+      }
+
+      function resizeViz() {
+        const dpr = Math.max(1, window.devicePixelRatio || 1);
+        const w = Math.floor(window.innerWidth);
+        const h = Math.floor(window.innerHeight);
+        viz.width = Math.round(w * dpr);
+        viz.height = Math.round(h * dpr);
+        viz.style.width = w + 'px';
+        viz.style.height = h + 'px';
+        const ctx = viz.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        draw(0);
+      }
+
+      // --- SMOOTHING: time-based EMA for the live (prediction) dot ---
+      const SMOOTH_TAU_MS = 40;
+      let targetX = null, targetY = null; // bias-corrected latest
+      let smoothX = null, smoothY = null; // rendered position
+      let lastAnim = performance.now();
+
+      function animate() {
+        if (!running) return;
+        const now = performance.now();
+        const dt = Math.max(1, now - lastAnim);
+        lastAnim = now;
+
+        const alpha = 1 - Math.exp(-dt / SMOOTH_TAU_MS);
+        if (targetX != null && targetY != null) {
+          if (smoothX == null) { smoothX = targetX; smoothY = targetY; }
+          else {
+            smoothX = (1 - alpha) * smoothX + alpha * targetX;
+            smoothY = (1 - alpha) * smoothY + alpha * targetY;
+          }
+        }
+
+        draw(dt);
+        requestAnimationFrame(animate);
+      }
+
+      function draw(/*dtMs*/) {
+        const ctx = viz.getContext('2d');
+        const w = viz.clientWidth;
+        const h = viz.clientHeight;
+
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, w, h);
+
+        // --- CALIBRATION UI ---
+        if (calibrating) {
+          // Instruction text: centered, slightly above middle
+          ctx.fillStyle = '#111';
+          ctx.font = '600 20px system-ui, -apple-system, Segoe UI, Roboto, Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('Follow the red dot', Math.round(w/2), Math.round(h * 0.18));
+
+          // Dot is instantly at current target (no motion tween)
+          const { cx, cy } = targetScreenPos(calibPhase, w, h);
+
+          // Progress ring (fills over CALIB_HOLD_SECONDS)
+          const elapsed = (performance.now() - holdStart) / 1000;
+          const frac = Math.max(0, Math.min(1, elapsed / CALIB_HOLD_SECONDS));
+
+          // background ring
+          ctx.beginPath();
+          ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+          ctx.lineWidth = 4;
+          ctx.stroke();
+
+          // progress arc
+          ctx.beginPath();
+          ctx.arc(cx, cy, 10, -Math.PI/2, -Math.PI/2 + frac * 2 * Math.PI);
+          ctx.strokeStyle = 'rgba(230,0,0,0.85)';
+          ctx.lineWidth = 4;
+          ctx.stroke();
+
+          // Calibration dot
+          ctx.beginPath();
+          ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+          ctx.closePath();
+          ctx.fillStyle = '#e11';
+          ctx.shadowColor = 'rgba(255, 64, 64, 0.5)';
+          ctx.shadowBlur = 8;
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+
+        // --- LIVE DOT (smoothed + clamped) ---
+        if (!calibrating && smoothX != null && smoothY != null) {
+          // Map model coords to screen pixels: X flipped to match intent (left=left visually)
+          let cx = (w / 2) - smoothX;
+          let cy = 0 - smoothY;
+
+          // Clamp so the dot never leaves the screen (stay inside border)
+          const margin = LIVE_DOT_RADIUS + BORDER_WIDTH;
+          cx = Math.max(margin, Math.min(w - margin, cx));
+          cy = Math.max(margin, Math.min(h - margin, cy));
+
+          ctx.beginPath();
+          ctx.arc(cx, cy, LIVE_DOT_RADIUS, 0, Math.PI * 2);
+          ctx.closePath();
+          ctx.fillStyle = '#e11';
+          ctx.fill();
+        }
+
+        // --- BORDER (very edges) ---
+        ctx.save();
+        ctx.lineWidth = BORDER_WIDTH;
+        ctx.strokeStyle = BORDER_COLOR;
+        const half = (BORDER_WIDTH % 2) ? 0.5 : 0; // keep stroke crisp
+        ctx.strokeRect(half, half, w - BORDER_WIDTH + (BORDER_WIDTH % 2), h - BORDER_WIDTH + (BORDER_WIDTH % 2));
+        ctx.restore();
+      }
+
+      // --- Calibration control ---
+      function beginCalibration() {
+        calibrating = true;
+        calibPhase = 0;
+        holdStart = performance.now();
+
+        calibSamplesX = [];
+        calibSamplesY = [];
+        calibMedians.length = 0;
+        biasX = 0; biasY = 0;
+
+        // Reset smoothing so we start clean after calibration
+        targetX = targetY = smoothX = smoothY = null;
+      }
+
+      function finalizeCurrentHold() {
+        const mx = median(calibSamplesX) ?? 0;
+        const my = median(calibSamplesY) ?? 0;
+        calibMedians.push([mx, my]);
+      }
+
+      function finishCalibration() {
+        const w = viz.clientWidth, h = viz.clientHeight;
+        const diffsX = [], diffsY = [];
+        for (let i = 0; i < CALIB_POINTS; i++) {
+          const { cx, cy } = targetScreenPos(i, w, h);
+          const { xExp, yExp } = expectedRawForScreen(cx, cy, w, h);
+          const [mx_i, my_i] = calibMedians[i];
+          diffsX.push(mx_i - xExp);
+          diffsY.push(my_i - yExp);
+        }
+        biasX = median(diffsX) || 0;
+        biasY = median(diffsY) || 0;
+
+        calibrating = false;
+
+        // Start smoothing fresh on next prediction
+        targetX = targetY = smoothX = smoothY = null;
+      }
+
+      async function startCamera() {
+        if (started) return;
+        started = true;
+
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: 'user' }, width: { ideal: 640 }, height: { ideal: 480 } },
+            audio: false
+          });
+          video.srcObject = stream;
+          await video.play();
+
+          overlay.classList.add('hide');
+          running = true;
+
+          // Start calibration immediately at the first corner (no intro, no movement)
+          beginCalibration();
+
+          pump();                        // network + timing loop
+          lastAnim = performance.now();
+          requestAnimationFrame(animate); // render loop
+        } catch (err) {
+          overlay.textContent = 'Camera error: ' + err.message;
+          overlay.classList.remove('hide');
+          started = false;
+        }
+      }
+
+      async function pump() {
+        if (!running) return;
+        const now = performance.now();
+        const minInterval = 1000 / targetFPS;
+        if (now - lastSent >= minInterval) {
+          lastSent = now;
+          await sendFrame();
+        }
+
+        // Calibration timing: hold for CALIB_HOLD_SECONDS at each fixed corner
+        if (calibrating) {
+          const elapsed = (now - holdStart) / 1000;
+          if (elapsed >= CALIB_HOLD_SECONDS) {
+            // finalize this corner
+            finalizeCurrentHold();
+            calibPhase += 1;
+
+            if (calibPhase < CALIB_POINTS) {
+              // jump directly to next corner and start recording
+              calibSamplesX = [];
+              calibSamplesY = [];
+              holdStart = performance.now();
+            } else {
+              // done
+              finishCalibration();
+            }
+          }
+        }
+
+        requestAnimationFrame(pump);
+      }
+
+      async function sendFrame() {
+        let w = video.videoWidth || 640;
+        let h = video.videoHeight || 480;
+        const maxSide = 320;
+        if (Math.max(w, h) > maxSide) {
+          const scale = maxSide / Math.max(w, h);
+          w = Math.round(w * scale);
+          h = Math.round(h * scale);
+        }
+        capture.width = w;
+        capture.height = h;
+        const ctx = capture.getContext('2d');
+        ctx.drawImage(video, 0, 0, w, h);
+        const blob = await new Promise((res) => capture.toBlob(res, 'image/jpeg', 0.6));
+        if (!blob) return;
+
+        try {
+          const form = new FormData();
+          form.append('frame', blob, 'frame.jpg');
+          const resp = await fetch('/predict', { method: 'POST', body: form });
+          const data = await resp.json();
+          if (data && data.ok && Array.isArray(data.coords) && data.coords.length === 2) {
+            const x = Number(data.coords[0]);
+            const y = Number(data.coords[1]);
+            if (Number.isFinite(x) && Number.isFinite(y)) {
+              lastCoords = [x, y];
+
+              // Collect ONLY during calibration holds (fixed corners)
+              if (calibrating) {
+                calibSamplesX.push(x);
+                calibSamplesY.push(y);
+              }
+
+              // Update smoothing target (bias-corrected)
+              const bx = x - biasX;
+              const by = y - biasY;
+              targetX = bx;
+              targetY = by;
+            } else {
+              lastCoords = null;
+            }
+          } else {
+            lastCoords = null;
+          }
+        } catch {
+          lastCoords = null;
+        } finally {
+          // draw() is driven by animate()
+        }
+      }
+
+      window.addEventListener('resize', resizeViz);
+      window.addEventListener('orientationchange', resizeViz);
+      resizeViz();
+      ['click','touchstart','keydown'].forEach(ev => {
+        window.addEventListener(ev, startCamera, { once: true });
+      });
+
+      // Press "C" to re-run calibration (corners only)
+      window.addEventListener('keydown', (e) => {
+        if (e.key.toLowerCase() === 'c') {
+          beginCalibration();
+        }
+      });
+    </script>
+  </body>
+</html>
