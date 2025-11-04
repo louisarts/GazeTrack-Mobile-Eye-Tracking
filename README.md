@@ -35,24 +35,24 @@ pip install -r requirements.txt
 | [`src/config.py`](src/config.py) | Central hyperparameters and the `RAW_DATA_PATH` placeholder that must point at your local GazeCapture root before running any preprocessing scripts. |
 | [`data_processing/data_loading.py`](data_processing/data_loading.py) | Extracts downloaded GazeCapture `.tar.gz` archives, parses Apple JSON annotations for faces, eyes, dots, and screen metadata, and compiles `data/raw_data.csv`. |
 | [`data_processing/data_cleaning.py`](data_processing/data_cleaning.py) | Filters out non-upright screen orientations and rows with invalid numeric values while deleting problematic frame images, producing `data/data_cleaned.csv`. |
-| [`data_processing/data_augmentation.py`](data_processing/data_augmentation.py) | Crops face and eye regions, applies augmentation (jitter, grayscale, Gaussian noise), serializes crops as `.npz`, deletes original frames, and records crop paths in `data/data_augmented.csv`. |
+| [`data_processing/data_augmentation.py`](data_processing/data_augmentation.py) | Crops face and eye regions, applies augmentation (jitter, grayscale, Gaussian noise), serialises crops as `.npz`, deletes original frames, and records crop paths in `data/data_augmented.csv`. |
 | [`data_processing/data_split.py`](data_processing/data_split.py) | Shuffles the augmented dataset and writes deterministic `data/train_data.csv`, `data/val_data.csv`, and `data/test_data.csv` splits. |
-| [`model_training/training_helper_functions.py`](model_training/training_helper_functions.py) | Shared TensorFlow utilities: dataset builders, label normalization, denormalized MAE metric, five CNN architectures (baseline, L2-regularized, dropout, early-stopping, batch-normalized), and a helper to export trained models to TFLite. |
-| [`model_training/model_1_training.py`](model_training/model_1_training.py) | Trains the baseline architecture (no regularization) and saves weights and training history. |
+| [`model_training/training_helper_functions.py`](model_training/training_helper_functions.py) | Shared TensorFlow utilities: dataset builders, label normalisation, denormalised MAE metric, five CNN architectures (baseline, L2-regularised, dropout, early-stopping, batch-normalised), and a helper to export trained models to TFLite. |
+| [`model_training/model_1_training.py`](model_training/model_1_training.py) | Trains the baseline architecture (no regularisation) and saves weights and training history. |
 | [`model_training/model_2_training.py`](model_training/model_2_training.py) | Trains the L2-regularized variant defined in `training_helper_functions.py`. |
 | [`model_training/model_3_training.py`](model_training/model_3_training.py) | Trains the dropout-regularized architecture. |
 | [`model_training/model_4_training.py`](model_training/model_4_training.py) | Trains the early-stopping variant with dropout and L2 regularization. |
 | [`model_training/model_5_training.py`](model_training/model_5_training.py) | Trains the batch-normalized + regularized architecture (default production choice). |
-| [`model_training/model_eval.py`](model_training/model_eval.py) | Provides `compute_avg_mae` to report denormalized MAE for any trained Keras model on a dataset iterator. |
+| [`model_training/model_eval.py`](model_training/model_eval.py) | Provides `compute_avg_mae` to report denormalised MAE for any trained Keras model on a dataset iterator. |
 | [`mobile_application/app.py`](mobile_application/app.py) | Flask app exposing `/` for the static single-page calibration UI and `/predict` for inference against a module named `model` that provides `predict_coords(np_img)`. |
-| [`mobile_application/model_in_prod.py`](mobile_application/model_in_prod.py) | Production inference logic: OpenCV face/eye detection, preprocessing to match training augments, TensorFlow Lite interpreter execution, and denormalization back to pixel coordinates. Rename or symlink to `mobile_application/model.py` (or adjust `PYTHONPATH`) so `app.py` can import it as `model`. |
-| [`mobile_application/static/index.html`](mobile_application/static/index.html) | Mobile-first calibration UI: captures camera frames, sends them to `/predict`, guides the user through a four-corner calibration routine, smooths predictions, and visualizes the live gaze dot. |
+| [`mobile_application/model_in_prod.py`](mobile_application/model_in_prod.py) | Production inference logic: OpenCV face/eye detection, preprocessing to match training augments, TensorFlow Lite interpreter execution, and denormalisation back to pixel coordinates. Rename or symlink to `mobile_application/model.py` (or adjust `PYTHONPATH`) so `app.py` can import it as `model`. |
+| [`mobile_application/static/index.html`](mobile_application/static/index.html) | Mobile-first calibration UI: captures camera frames, sends them to `/predict`, guides the user through a four-corner calibration routine, smooths predictions, and visualises the live gaze dot. |
 | [`models/`](models) | Pre-trained TensorFlow Lite models (`model_1.tflite` … `model_5.tflite`). Copy the desired file next to `mobile_application/model.py` for serving. |
 | [`training_histories/`](training_histories) | CSV logs (`model_1_history.csv` … `model_5_history.csv`) containing Keras training metrics for analysis and comparisons. |
 
 ## Data processing pipeline
 1. **Download the dataset** – Visit the [GazeCapture download page](https://gazecapture.csail.mit.edu/download.php), request access, and download the participant archives into `RAW_DATA_PATH/gazecapture/`.
-2. **Extract & index** – Run `python data_processing/data_loading.py` to extract `.tar.gz` files into `RAW_DATA_PATH/gazecapture_data/` and generate `data/raw_data.csv` summarizing all frames and metadata.
+2. **Extract & index** – Run `python data_processing/data_loading.py` to extract `.tar.gz` files into `RAW_DATA_PATH/gazecapture_data/` and generate `data/raw_data.csv` summarising all frames and metadata.
 3. **Clean invalid samples** – Run `python data_processing/data_cleaning.py` to drop samples with non-upright orientation or invalid numeric values. Outputs `data/data_cleaned.csv`.
 4. **Augment & crop** – Run `python data_processing/data_augmentation.py` to crop face/eye regions, apply augmentations, save `.npz` tensors, and produce `data/data_augmented.csv` with new crop paths.
 5. **Create splits** – Run `python data_processing/data_split.py` to shuffle and write train/validation/test CSV splits inside `data/`.
@@ -93,7 +93,7 @@ Adjust the hyperparameters either directly in each script or by editing the shar
 1. **Set up the model module**
    * Ensure the TFLite model you want to serve is accessible (e.g. `models/model_5.tflite`).
    * Copy or symlink [`mobile_application/model_in_prod.py`](mobile_application/model_in_prod.py) to `mobile_application/model.py`, or add the repository root to `PYTHONPATH` so `app.py` can import it as `model`.
-   * Optionally edit `predict_coords` in `model_in_prod.py` to point at a different `.tflite` file or adjust normalization constants.
+   * Optionally edit `predict_coords` in `model_in_prod.py` to point at a different `.tflite` file or adjust normalisation constants.
 2. **Install runtime dependencies**
    ```bash
    pip install flask opencv-python pillow tensorflow torch torchvision numpy
@@ -105,9 +105,8 @@ Adjust the hyperparameters either directly in each script or by editing the shar
    ```
    The app runs on `https://0.0.0.0:8000` with a self-signed certificate. For plain HTTP during development, uncomment the alternative `app.run` call at the bottom of `app.py`.
 4. **Use the UI**
-   * Visit the server from your mobile device or desktop browser (accept the self-signed certificate warning if needed).
-   * Tap to start the camera stream, follow the four-corner calibration prompts, and observe the gaze dot tracking in real time.
-   * Press `C` (or use the on-screen instructions) to re-run calibration as needed.
+   * Visit the server from your mobile device (accept the warnings if needed).
+   * Tap to start the camera stream, follow the four-corner calibration prompts, and observe the gaze dot tracking in real time!!
 
 ## Artifacts
 * **Models** – TensorFlow Lite exports in [`models/`](models) ready for deployment.
